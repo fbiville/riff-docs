@@ -1,6 +1,8 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-rm *.html || true
-asciidoctor -r asciidoctor-diagram -r asciidoctor-pdf -b pdf *.adoc
+rm dist/*.html || true
+rm dist/*.png  || true
+
+asciidoctor --base-dir $(pwd) --destination-dir $(pwd)/dist/ -r asciidoctor-diagram -b html5 *.adoc
 

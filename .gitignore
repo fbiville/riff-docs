@@ -1,4 +1,4 @@
-*.html
+dist/*.html
 .asciidoctor
-diag-*.png
-*.pdf
+dist/diag-*.png
+dist/*.pdf
