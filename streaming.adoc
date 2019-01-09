@@ -5,12 +5,12 @@
 .square possible invocations in sequence
 [plantuml, format="png"]
 ----
+participant client
+participant cluster
 box "Pod 1" #LightBlue
 	participant invoker
 	participant function
 end box
-participant cluster
-participant client
 
 == First request-reply ==
 client -> cluster : `HTTP request [...] 'Host: square.default.example.com' [...] --data 8
