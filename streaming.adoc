@@ -13,7 +13,7 @@ box "Pod 1" #LightBlue
 end box
 
 == First request-reply ==
-client -> cluster : `HTTP request [...] 'Host: square.default.example.com' [...] --data 8
+client -> cluster : HTTP request [...] 'Host: square.default.example.com' [...] --data 8
 cluster -> invoker : << activates pod >>
 activate invoker
 cluster -> invoker : << routes request >>
