@@ -40,45 +40,96 @@ deactivate function
 deactivate invoker
 ----
 
-== Possible GRPC streaming model ==
+== Possible gRPC streaming model ==
 
-.run-length encoding possible invocations in sequence
+.riff.proto
+[source,proto]
+----
+service Riff {
+    rpc Invoke(stream Frame) returns (stream Message) {}
+}
+
+message Start {
+    string contentType = 1;
+    string accept = 2;
+}
+
+message Message {
+    bytes payload = 1;
+    map<string, string> headers = 2;
+}
+
+message Frame {
+    oneof value {
+        Start start = 1;
+        Message message = 2;
+    }
+}
+----
+
+."112221" run-length encoding possible invocations in sequence
 [plantuml, format="png"]
 ----
 participant grpc_client
 participant cluster
 box "Pod 1" #LightBlue
-	participant grpc_invoker
+	participant invoker
 	participant function
 end box
 
 
-grpc_client -> cluster : GRPC request with 'Host: rle.default.example.com' [...] and payload "112221"
-cluster -> grpc_invoker : << activates pod >>
-activate grpc_invoker
-cluster -> grpc_invoker : << routes request >>
-grpc_invoker -> function : << instanciates function once >>
+grpc_client -> cluster : gRPC call to Invoke with Start payload
+cluster -> invoker : << activates pod >>
+activate invoker
+cluster -> invoker : << routes request >>
+invoker -> invoker : unmarshalls Start payload
+invoker -> function : << instanciates function >>
 activate function
-grpc_invoker -> grpc_invoker : unmarshalls request Protobuf payload
-grpc_invoker -> function : invoke(fn, "112221")
+function -> function : << initializes and starts accepting streams >>
+function -> invoker : instanciation complete
+invoker -> grpc_client : 200 OK response
+grpc_client-> cluster : gRPC call to Invoke with Message payload ("1")
+cluster -> invoker : << routes request >>
+invoker -> invoker : unmarshalls Message payload
+invoker -> function : Invoke(fn, "1")
 function -> function : onNext("1")
+grpc_client-> cluster : gRPC call to Invoke with Message payload ("1")
+cluster -> invoker : << routes request >>
+invoker -> invoker : unmarshalls Message payload
+invoker -> function : Invoke(fn, "1")
 function -> function : onNext("1")
+grpc_client-> cluster : gRPC call to Invoke with Message payload ("2")
+cluster -> invoker : << routes request >>
+invoker -> invoker : unmarshalls Message payload
+invoker -> function : Invoke(fn, "2")
 function -> function : onNext("2")
-function -> grpc_invoker : return Stream(Tuple("1", 2))
-grpc_invoker -> grpc_invoker : marshalls data stream Protobuf payload
-grpc_invoker ->  grpc_client : HTTP 2.0 data stream with GRPC payload ("1", 2)
+function -> invoker : return Stream(Tuple("1", 2))
+invoker -> invoker : marshalls data stream Protobuf payload
+invoker ->  grpc_client : gRPC response Message with ("1", 2)
+grpc_client-> cluster : gRPC call to Invoke with Message payload ("2")
+cluster -> invoker : << routes request >>
+invoker -> invoker : unmarshalls Message payload
+invoker -> function : Invoke(fn, "2")
 function -> function : onNext("2")
+grpc_client-> cluster : gRPC call to Invoke with Message payload ("2")
+cluster -> invoker : << routes request >>
+invoker -> invoker : unmarshalls Message payload
+invoker -> function : Invoke(fn, "2")
 function -> function : onNext("2")
+grpc_client-> cluster : gRPC call to Invoke with Message payload ("1")
+cluster -> invoker : << routes request >>
+invoker -> invoker : unmarshalls Message payload
+invoker -> function : Invoke(fn, "1")
 function -> function : onNext("1")
-function -> grpc_invoker : return Stream(Tuple("2", 3))
-grpc_invoker -> grpc_invoker : marshalls data stream Protobuf payload
-grpc_invoker ->  grpc_client : HTTP 2.0 data stream with GRPC payload ("2", 3)
-function -> grpc_invoker : return Stream(Tuple("1", 1))
-grpc_invoker -> grpc_invoker : marshalls data stream Protobuf payload
-grpc_invoker ->  grpc_client : HTTP 2.0 data stream with GRPC payload ("1", 1)
+function -> invoker : return Stream(Tuple("2", 3))
+invoker -> invoker : marshalls data stream Protobuf payload
+invoker ->  grpc_client : gRPC response Message with ("2", 3)
+function -> invoker : return Stream(Tuple("1", 1))
+invoker -> invoker : marshalls data stream Protobuf payload
+invoker ->  grpc_client : gRPC response Message with ("1", 1)
 ...scale-to-zero timeout reached...
-cluster -> grpc_invoker : <<scales pod down>>
-grpc_invoker -> grpc_invoker : << shutdown >>
+cluster -> invoker : <<scales pod down>>
+invoker -> invoker : << shutdown >>
 deactivate function
-deactivate grpc_invoker
+deactivate invoker
 ----
