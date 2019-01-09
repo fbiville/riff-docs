@@ -27,7 +27,7 @@ invoker -> client : HTTP response with 64
 == Second request-reply before scale-to-0 ==
 client -> cluster : `HTTP request [...] 'Host: square.default.example.com' [...] --data 8
 cluster -> invoker : << routes request >>
-note right: the request could actually be routed to another pod instance instead
+note right: the request could actually be routed to another pod instance instead or concurrently served to the same pod 
 invoker -> invoker : unmarshalls payload
 invoker -> function : invoke(fn,8)
 function -> invoker : return 64
