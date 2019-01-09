@@ -40,3 +40,45 @@ deactivate function
 deactivate invoker
 ----
 
+== Possible GRPC streaming model ==
+
+.run-length encoding possible invocations in sequence
+[plantuml, format="png"]
+----
+participant grpc_client
+participant cluster
+box "Pod 1" #LightBlue
+	participant grpc_invoker
+	participant function
+end box
+
+
+grpc_client -> cluster : GRPC request with 'Host: rle.default.example.com' [...] and payload "112221"
+cluster -> grpc_invoker : << activates pod >>
+activate grpc_invoker
+cluster -> grpc_invoker : << routes request >>
+grpc_invoker -> function : << instanciates function once >>
+activate function
+grpc_invoker -> grpc_invoker : unmarshalls request Protobuf payload
+grpc_invoker -> function : invoke(fn, "112221")
+function -> function : onNext("1")
+function -> function : onNext("1")
+function -> function : onNext("2")
+function -> grpc_invoker : return Stream(Tuple("1", 2))
+grpc_invoker -> grpc_invoker : marshalls data stream Protobuf payload
+grpc_invoker ->  grpc_client : HTTP 2.0 data stream with GRPC payload ("1", 2)
+function -> function : onNext("2")
+function -> function : onNext("2")
+function -> function : onNext("1")
+function -> grpc_invoker : return Stream(Tuple("2", 3))
+grpc_invoker -> grpc_invoker : marshalls data stream Protobuf payload
+grpc_invoker ->  grpc_client : HTTP 2.0 data stream with GRPC payload ("2", 3)
+function -> grpc_invoker : return Stream(Tuple("1", 1))
+grpc_invoker -> grpc_invoker : marshalls data stream Protobuf payload
+grpc_invoker ->  grpc_client : HTTP 2.0 data stream with GRPC payload ("1", 1)
+...scale-to-zero timeout reached...
+cluster -> grpc_invoker : <<scales pod down>>
+grpc_invoker -> grpc_invoker : << shutdown >>
+deactivate function
+deactivate grpc_invoker
+----
