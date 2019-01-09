@@ -6,7 +6,7 @@
 [plantuml, format="png"]
 ----
 box "Pod 1" #LightBlue
-	participant server
+	participant invoker
 	participant function
 end box
 participant cluster
@@ -14,30 +14,29 @@ participant client
 
 == First request-reply ==
 client -> cluster : `HTTP request [...] 'Host: square.default.example.com' [...] --data 8
-cluster -> server : << activates pod >>
-note left: server a.k.a. invoker in riff terminology
-activate server
-cluster -> server : << routes request >>
-server -> function : << instanciates function once >>
+cluster -> invoker : << activates pod >>
+activate invoker
+cluster -> invoker : << routes request >>
+invoker -> function : << instanciates function once >>
 activate function
-server -> server : unmarshalls request payload
-server -> function : invoke(fn,8)
-function -> server : return 64
-server -> server : marshalls response payload
-server -> client : HTTP response with 64
+invoker -> invoker : unmarshalls request payload
+invoker -> function : invoke(fn,8)
+function -> invoker : return 64
+invoker -> invoker : marshalls response payload
+invoker -> client : HTTP response with 64
 == Second request-reply before scale-to-0 ==
 client -> cluster : `HTTP request [...] 'Host: square.default.example.com' [...] --data 8
-cluster -> server : << routes request >>
+cluster -> invoker : << routes request >>
 note right: the request could actually be routed to another pod instance instead
-server -> server : unmarshalls payload
-server -> function : invoke(fn,8)
-function -> server : return 64
-server -> server : marshalls response payload
-server -> client : HTTP response with 64
+invoker -> invoker : unmarshalls payload
+invoker -> function : invoke(fn,8)
+function -> invoker : return 64
+invoker -> invoker : marshalls response payload
+invoker -> client : HTTP response with 64
 ...scale-to-zero timeout reached...
-cluster -> server : <<scales pod down>>
-server -> server : << shutdown >>
+cluster -> invoker : <<scales pod down>>
+invoker -> invoker : << shutdown >>
 deactivate function
-deactivate server
+deactivate invoker
 ----
 
