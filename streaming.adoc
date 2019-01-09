@@ -1,0 +1,42 @@
+= Streaming in riff
+
+== Current request-reply model ==
+
+.square possible invocations in sequence
+[plantuml, format="png"]
+----
+box "Pod 1" #LightBlue
+	participant server
+	participant function
+end box
+participant Knative
+participant client
+
+== First request-reply ==
+client -> Knative : `HTTP request [...] 'Host: square.default.example.com' [...] --data 8
+Knative -> server : << activates pod >>
+activate server
+Knative -> server : << routes request >>
+server -> function : << instanciates function once >>
+activate function
+server -> server : unmarshalls request payload
+server -> function : invoke(fn,8)
+function -> server : return 64
+server -> server : marshalls response payload
+server -> client : HTTP response with 64
+== Second request-reply before scale-to-0 ==
+client -> Knative : `HTTP request [...] 'Host: square.default.example.com' [...] --data 8
+Knative -> server : << routes request >>
+note right: the request could actually be routed to another pod instance instead
+server -> server : unmarshalls payload
+server -> function : invoke(fn,8)
+function -> server : return 64
+server -> server : marshalls response payload
+server -> client : HTTP response with 64
+...scale-to-zero timeout reached...
+Knative -> server : <<scales pod down>>
+server -> server : << shutdown >>
+deactivate function
+deactivate server
+----
+
