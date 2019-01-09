@@ -9,14 +9,15 @@ box "Pod 1" #LightBlue
 	participant server
 	participant function
 end box
-participant Knative
+participant cluster
 participant client
 
 == First request-reply ==
-client -> Knative : `HTTP request [...] 'Host: square.default.example.com' [...] --data 8
-Knative -> server : << activates pod >>
+client -> cluster : `HTTP request [...] 'Host: square.default.example.com' [...] --data 8
+cluster -> server : << activates pod >>
+note left: server a.k.a. invoker in riff terminology
 activate server
-Knative -> server : << routes request >>
+cluster -> server : << routes request >>
 server -> function : << instanciates function once >>
 activate function
 server -> server : unmarshalls request payload
@@ -25,8 +26,8 @@ function -> server : return 64
 server -> server : marshalls response payload
 server -> client : HTTP response with 64
 == Second request-reply before scale-to-0 ==
-client -> Knative : `HTTP request [...] 'Host: square.default.example.com' [...] --data 8
-Knative -> server : << routes request >>
+client -> cluster : `HTTP request [...] 'Host: square.default.example.com' [...] --data 8
+cluster -> server : << routes request >>
 note right: the request could actually be routed to another pod instance instead
 server -> server : unmarshalls payload
 server -> function : invoke(fn,8)
@@ -34,7 +35,7 @@ function -> server : return 64
 server -> server : marshalls response payload
 server -> client : HTTP response with 64
 ...scale-to-zero timeout reached...
-Knative -> server : <<scales pod down>>
+cluster -> server : <<scales pod down>>
 server -> server : << shutdown >>
 deactivate function
 deactivate server
