@@ -7,6 +7,8 @@
 .square possible invocations in sequence
 [plantuml, format="png"]
 ----
+skinparam BoxPadding 10
+
 participant client
 box "Pod 1" #LightBlue
 	participant invoker
@@ -33,19 +35,19 @@ invoker -> invoker : marshalls response payload
 invoker -> client : HTTP response with 64
 ...scale-to-zero timeout reached...
 invoker -> invoker : << shuts down >>
-deactivate function
-deactivate invoker
+destroy function
+destroy invoker
 ----
 
 == Possible gRPC streaming model ==
 
-=== Run-Length Encoding invocations on "AABBBC"
+=== Run-Length Encoding invocations on "AABBC"
 
 .riff.proto
 [source,proto]
 ----
 service Riff {
-    rpc Invoke(stream Frame) returns (stream Message) {}
+    rpc Invoke(stream Signal) returns (stream Signal) {}
 }
 
 message Start {
@@ -53,72 +55,109 @@ message Start {
     string accept = 2;
 }
 
-message Message {
+message Next {
     bytes payload = 1;
     map<string, string> headers = 2;
 }
 
-message Frame {
+message Complete {
+}
+
+message Error {
+}
+
+message Signal {
     oneof value {
         Start start = 1;
-        Message message = 2;
+        Next next = 2;
+        Complete complete = 3;
+        Error error = 4;
     }
 }
 ----
 
-."AABBBC" run-length encoding possible invocations in sequence
+."AABBC" run-length encoding with a Java client and a Go server
 [plantuml, format="png"]
 ----
-participant grpc_client
+skinparam BoxPadding 10
+
+box "gRPC client" #LightGreen
+	participant main
+	participant request <<StreamObserver>>
+	participant response <<StreamObserver>>
+end box
 box "Pod 1" #LightBlue
-	participant invoker
+	participant go_invoker
+	participant in <<channel>>
 	participant function
+	participant out <<channel>>
 end box
 
-
-grpc_client -> invoker : gRPC call to Invoke with Start payload
-activate invoker
-invoker -> invoker : unmarshalls Start payload
-invoker -> function : << instanciates function >>
+main -> response : new()
+activate response
+main -> main : request = Invoke(response)
+main --> go_invoker : gRPC magic
+go_invoker -> go_invoker : Invoke(riff_InvokeServer)
+activate in
+activate out
+activate request
 activate function
-function -> function : << initializes and starts accepting streams >>
-function -> invoker : instanciation complete
-invoker -> grpc_client : 200 OK response
-grpc_client-> invoker : gRPC call to Invoke with Message payload ("A")
-invoker -> invoker : unmarshalls Message payload
-invoker -> function : Invoke(fn, "A")
-function -> function : onNext("A")
-grpc_client-> invoker : gRPC call to Invoke with Message payload ("A")
-invoker -> invoker : unmarshalls Message payload
-invoker -> function : Invoke(fn, "A")
-function -> function : onNext("A")
-grpc_client-> invoker : gRPC call to Invoke with Message payload ("B")
-invoker -> invoker : unmarshalls Message payload
-invoker -> function : Invoke(fn, "B")
-function -> function : onNext("B")
-function -> invoker : return Stream(Tuple("A", 2))
-invoker -> invoker : marshalls data stream Protobuf payload
-invoker ->  grpc_client : gRPC response Message with ("A", 2)
-grpc_client -> invoker : gRPC call to Invoke with Message payload ("B")
-invoker -> invoker : unmarshalls Message payload
-invoker -> function : Invoke(fn, "B")
-function -> function : onNext("B")
-grpc_client-> invoker : gRPC call to Invoke with Message payload ("B")
-invoker -> invoker : unmarshalls Message payload
-invoker -> function : Invoke(fn, "B")
-function -> function : onNext("B")
-grpc_client-> invoker : gRPC call to Invoke with Message payload ("C")
-invoker -> invoker : unmarshalls Message payload
-invoker -> function : Invoke(fn, "C")
-function -> function : onNext("C")
-function -> invoker : return Stream(Tuple("B", 3))
-invoker -> invoker : marshalls data stream Protobuf payload
-invoker ->  grpc_client : gRPC response Message with ("B", 3)
-function -> invoker : return Stream(Tuple("C", 1))
-invoker -> invoker : marshalls data stream Protobuf payload
-invoker ->  grpc_client : gRPC response Message with ("C", 1)
-...scale-to-zero timeout reached...
-invoker -> invoker : << shutdown >>
-deactivate function
-deactivate invoker
+
+main -> request : onNext(Start(Content-Type: text, Accept: json))
+request -> go_invoker
+go_invoker -> go_invoker
+
+
+main -> request : onNext(Next("A"))
+request -> go_invoker
+go_invoker -> in : send("A")
+in -> function : receive("A")
+
+main -> request : onNext(Next("A"))
+request -> go_invoker
+go_invoker -> in : send("A")
+in -> function : receive("A")
+||45||
+
+main -> request : onNext(Next("B"))
+request -> go_invoker
+go_invoker -> in : send("B")
+in -> function : receive("B")
+function -> out : send(tuple{"A", 2})
+out -> go_invoker : receive(tuple{"A", 2})
+go_invoker -> response
+response -> main
+
+
+main -> request : onNext(Next("B"))
+request -> go_invoker
+go_invoker -> in : send("B")
+in -> function : receive("B")
+||45||
+
+main -> request : onNext(Next("C"))
+request -> go_invoker
+go_invoker -> in : send("C")
+in -> function : receive("C")
+function -> out : send(tuple{"B", 2})
+out -> go_invoker : receive(tuple{"B", 2})
+go_invoker -> response
+response -> main
+||45||
+
+main -> request : onNext(Complete())
+request -> go_invoker
+destroy request
+go_invoker -> in : close()
+destroy in
+in -> function : channel_closed()
+function -> out : send(tuple{"C", 1})
+out -> go_invoker : receive(tuple{"C", 1})
+function -> out : close()
+destroy out
+go_invoker -> response
+go_invoker -> response : onComplete()
+response -> main
+destroy response
+
 ----
